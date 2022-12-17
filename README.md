@@ -1,4 +1,4 @@
-### THE SIMPLEST OF THE SIMPLE HTTP SERVER ON THE MARKET
+### The simplest available HTTP server on the market
 
 *attach to your pom and start discovering*
 
