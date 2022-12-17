@@ -98,7 +98,7 @@ public class HttpServerImpl implements HttpServer {
 
     private void handleFileResponse(Headers headers, Response response, Request request, HandlerWrapper handler) throws IOException {
         String path = handler.getHandler().parseRequest(request).toString();
-        File fi = new File(this.rootDirPath + "\\" +path);
+        File fi = new File(this.rootDirPath + File.pathSeparator +path);
         String filename = fi.getName();
         setContentType(headers, filename, handler.getContentType());
         byte[] fileContent = Files.readAllBytes(fi.toPath());
@@ -108,7 +108,7 @@ public class HttpServerImpl implements HttpServer {
     }
     private void handleStandardFileResponse(Headers headers, Response response, String url) throws IOException {
         String filename = url.substring(1);
-        File file = new File(this.rootDirPath + "\\" + filename);
+        File file = new File(this.rootDirPath + File.pathSeparator + filename);
 
         setContentType(headers, filename, "text");
         byte[] fileContent = Files.readAllBytes(file.toPath());

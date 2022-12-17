@@ -5,6 +5,7 @@ import org.ygaros.server.handler.HandlerWrapper;
 import org.ygaros.server.handler.RestHandler;
 import org.ygaros.server.request.HttpMethod;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.net.URL;
 import java.util.HashMap;
@@ -44,11 +45,11 @@ public class HttpServerBuilder {
         return this.withRestHandler(HttpMethod.GET, "/", handler);
     }
     public HttpServerBuilder withWwwDirPath(String path, boolean absolutePath) throws FileNotFoundException {
-        String resourcePath = System.getProperty("user.dir").concat("\\src\\main\\resources");
-        if(path.startsWith("\\")){
-            resourcePath = resourcePath.concat("\\");
+        String resourcePath = System.getProperty("user.dir").concat(File.pathSeparator+"src" + File.pathSeparator+"main"+File.pathSeparator+"resources");
+        if(path.startsWith(File.pathSeparator)){
+            resourcePath = resourcePath.concat(File.pathSeparator);
         }
-        if(path.endsWith("\\")){
+        if(path.endsWith(File.pathSeparator)){
             path = path.substring(0, path.length() - 1);
         }
         resourcePath = resourcePath.concat(path);
@@ -60,7 +61,7 @@ public class HttpServerBuilder {
         return this;
     }
     public HttpServerBuilder withDefaultResourcesPath() throws FileNotFoundException {
-        this.wwwDirPath = System.getProperty("user.dir").concat("\\src\\main\\resources");
+        this.wwwDirPath = System.getProperty("user.dir").concat(File.pathSeparator+"src"+File.pathSeparator+"main"+File.pathSeparator+"resources");
         return this;
     }
     public HttpServerImpl build(){
