@@ -45,11 +45,11 @@ public class HttpServerBuilder {
         return this.withRestHandler(HttpMethod.GET, "/", handler);
     }
     public HttpServerBuilder withWwwDirPath(String path, boolean absolutePath) throws FileNotFoundException {
-        String resourcePath = System.getProperty("user.dir").concat(File.pathSeparator+"src" + File.pathSeparator+"main"+File.pathSeparator+"resources");
-        if(path.startsWith(File.pathSeparator)){
-            resourcePath = resourcePath.concat(File.pathSeparator);
+        String resourcePath = System.getProperty("user.dir").concat(File.separator+"src" + File.separator+"main"+File.separator+"resources");
+        if(path.startsWith(File.separator)){
+            resourcePath = resourcePath.concat(File.separator);
         }
-        if(path.endsWith(File.pathSeparator)){
+        if(path.endsWith(File.separator)){
             path = path.substring(0, path.length() - 1);
         }
         resourcePath = resourcePath.concat(path);
@@ -61,7 +61,7 @@ public class HttpServerBuilder {
         return this;
     }
     public HttpServerBuilder withDefaultResourcesPath() throws FileNotFoundException {
-        this.wwwDirPath = System.getProperty("user.dir").concat(File.pathSeparator+"src"+File.pathSeparator+"main"+File.pathSeparator+"resources");
+        this.wwwDirPath = System.getProperty("user.dir").concat(File.separator+"src"+File.separator+"main"+File.separator+"resources");
         return this;
     }
     public HttpServerImpl build(){
