@@ -4,8 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.ygaros.server.HttpServer;
 import org.ygaros.server.IllegalRequestException;
-import org.ygaros.server.UrlMatcher;
-import org.ygaros.server.UrlType;
+import org.ygaros.server.request.UrlMatcher;
+import org.ygaros.server.request.UrlType;
 import org.ygaros.server.handler.HandlerWrapper;
 import org.ygaros.server.request.Headers;
 import org.ygaros.server.request.HttpCode;
@@ -46,39 +46,65 @@ public class HttpServerImpl implements HttpServer {
         log.info(String.format("Http Server at %d is running", this.port));
         while(true){
             Socket socket = serverSocket.accept();
-            Headers headers = new Headers();
-            Response response = new Response(HTTP_VER, headers);
-            try {
-                Request request = RequestParser.parse(socket.getInputStream());
-                String requestUrl = request.getUrl();
-                try {
-                    HandlerWrapper handler = this.getHandlerWrapper(request);
-                    handleResponse(headers, response, request, handler);
-                }catch (UnsupportedOperationException e) {
-                    if(this.fileMapping && UrlMatcher.getUrlType(requestUrl) == UrlType.FILE) {
-                        if(requestUrl.endsWith("index")){
-                            requestUrl = requestUrl.concat(".html");
-                        }
-                        try {
-                            handleStandardFileResponse(headers, response, requestUrl);
-                        } catch (IOException ex) {
-                            response.setCode(HttpCode.NOT_FOUND);
-                        }
-                    }
-                }
-                log.info(request.toString());
-            } catch (IllegalRequestException e) {
-                response.setCode(HttpCode.BAD_REQUEST);
-            }finally {
-                log.info(response.toString());
-                OutputStream outputStream = socket.getOutputStream();
-                outputStream.write(response.toByteResponse());
-                outputStream.flush();
-                socket.close();
-            }
+            Response response = this.handleRequest(socket.getInputStream());
+            log.info(response.toString());
+
+            OutputStream outputStream = socket.getOutputStream();
+            outputStream.write(response.toByteResponse());
+            outputStream.flush();
+            socket.close();
         }
     }
 
+    private Response handleRequest(InputStream inputStream){
+        Headers headers = new Headers();
+        Response response = new Response(HTTP_VER, headers);
+        Request request;
+        try {
+            request = RequestParser.parse(inputStream);
+            log.info(request.toString());
+        }catch (IllegalRequestException | IOException e){
+            return defaultBadRequestResponse(response);
+        }
+
+        HandlerWrapper handler = this.getHandlerWrapper(request);
+        if(handler == null){
+            String requestUrl = request.getUrl();
+            if(this.fileMapping && UrlMatcher.getUrlType(requestUrl) == UrlType.FILE) {
+                requestUrl = mapIndexToIndexHTML(requestUrl);
+                try {
+                    handleStandardFileResponse(headers, response, requestUrl);
+                } catch (IOException ex) {
+                    response.setCode(HttpCode.NOT_FOUND);
+                }
+                return response;
+            }
+        }else {
+            try {
+                handleResponse(headers, response, request, handler);
+            } catch (UnsupportedOperationException | IOException e) {
+                return defaultNotFoundResponse(response);
+            }
+        }
+        log.info(request.toString());
+        return response;
+    }
+
+    private String mapIndexToIndexHTML(String requestUrl) {
+        if(requestUrl.endsWith("index")){
+            requestUrl = requestUrl.concat(".html");
+        }
+        return requestUrl;
+    }
+
+    private Response defaultNotFoundResponse(Response response) {
+        response.setCode(HttpCode.NOT_FOUND);
+        return response;
+    }
+    private Response defaultBadRequestResponse(Response response) {
+        response.setCode(HttpCode.BAD_REQUEST);
+        return response;
+    }
 
     private void handleResponse(Headers headers, Response response, Request request, HandlerWrapper handler) throws IOException {
         if(!handler.getContentType().equals(MimeType.JSON)){
@@ -137,7 +163,22 @@ public class HttpServerImpl implements HttpServer {
         return this.handlers.entrySet().stream()
                 .filter(entry -> entry.getValue().getMethod().equals(request.getMethod()) && (entry.getKey().equals(request.getUrl()) || entry.getKey().equals("/**")))
                 .findFirst()
-                .orElseThrow(() -> new UnsupportedOperationException("bad request"))
+                .orElseGet(() -> new Map.Entry<String, HandlerWrapper>() {
+                    @Override
+                    public String getKey() {
+                        return null;
+                    }
+
+                    @Override
+                    public HandlerWrapper getValue() {
+                        return null;
+                    }
+
+                    @Override
+                    public HandlerWrapper setValue(HandlerWrapper value) {
+                        return null;
+                    }
+                })
                 .getValue();
     }
 
