@@ -9,6 +9,7 @@ import org.ygaros.server.UrlType;
 import org.ygaros.server.handler.HandlerWrapper;
 import org.ygaros.server.request.Headers;
 import org.ygaros.server.request.HttpCode;
+import org.ygaros.server.request.MimeType;
 import org.ygaros.server.request.Request;
 import org.ygaros.server.request.RequestParser;
 import org.ygaros.server.request.Response;
@@ -50,21 +51,24 @@ public class HttpServerImpl implements HttpServer {
             try {
                 Request request = RequestParser.parse(socket.getInputStream());
                 String requestUrl = request.getUrl();
-                if(this.fileMapping && UrlMatcher.getUrlType(requestUrl) == UrlType.FILE){
-                    try {
-                        handleStandardFileResponse(headers, response, requestUrl);
-                    }catch (IOException e){
-                        response.setCode(HttpCode.BAD_REQUEST);
-                    }
-                }else{
+                try {
                     HandlerWrapper handler = this.getHandlerWrapper(request);
                     handleResponse(headers, response, request, handler);
+                }catch (UnsupportedOperationException e) {
+                    if(this.fileMapping && UrlMatcher.getUrlType(requestUrl) == UrlType.FILE) {
+                        if(requestUrl.endsWith("index")){
+                            requestUrl = requestUrl.concat(".html");
+                        }
+                        try {
+                            handleStandardFileResponse(headers, response, requestUrl);
+                        } catch (IOException ex) {
+                            response.setCode(HttpCode.NOT_FOUND);
+                        }
+                    }
                 }
                 log.info(request.toString());
             } catch (IllegalRequestException e) {
                 response.setCode(HttpCode.BAD_REQUEST);
-            }catch (UnsupportedOperationException e){
-                response.setCode(HttpCode.METHOD_NOT_ALLOWED);
             }finally {
                 log.info(response.toString());
                 OutputStream outputStream = socket.getOutputStream();
@@ -75,8 +79,9 @@ public class HttpServerImpl implements HttpServer {
         }
     }
 
+
     private void handleResponse(Headers headers, Response response, Request request, HandlerWrapper handler) throws IOException {
-        if(handler.getContentType().startsWith("image") || handler.getContentType().startsWith("text")){
+        if(!handler.getContentType().equals(MimeType.JSON)){
             handleFileResponse(headers, response, request, handler);
         }else {
             handleRestResponse(headers, response, request, handler);
@@ -88,21 +93,20 @@ public class HttpServerImpl implements HttpServer {
         byte[] indexBuilder = mapper.writeValueAsBytes(handled);
         int contentLength = indexBuilder.length;
 
-        headers.set("Content-Length", String.valueOf(contentLength));
-        headers.set("Content-Type", handler.getContentType());
+        headers.setContentLength(contentLength);
+        headers.setContentType(handler.getContentType());
 
         response.setBody(indexBuilder);
         response.setCode(HttpCode.OK);
-        log.info(response.toString());
     }
 
     private void handleFileResponse(Headers headers, Response response, Request request, HandlerWrapper handler) throws IOException {
         String path = handler.getHandler().parseRequest(request).toString();
-        File fi = new File(this.rootDirPath + File.separator +path);
-        String filename = fi.getName();
-        setContentType(headers, filename, handler.getContentType());
-        byte[] fileContent = Files.readAllBytes(fi.toPath());
-        headers.set("Content-Length", String.valueOf(fileContent.length));
+        File file = new File(this.rootDirPath + File.separator + path);
+        String filename = file.getName();
+        setContentType(headers, filename);
+        byte[] fileContent = Files.readAllBytes(file.toPath());
+        headers.setContentLength(fileContent.length);
         response.setBody(fileContent);
         response.setCode(HttpCode.OK);
     }
@@ -110,25 +114,23 @@ public class HttpServerImpl implements HttpServer {
         String filename = url.substring(1);
         File file = new File(this.rootDirPath + File.separator + filename);
 
-        setContentType(headers, filename, "text");
+        setContentType(headers, filename);
         byte[] fileContent = Files.readAllBytes(file.toPath());
-        headers.set("Content-Length", String.valueOf(fileContent.length));
+        headers.setContentLength(fileContent.length);
         response.setBody(fileContent);
         response.setCode(HttpCode.OK);
     }
-    private void setContentType(Headers headers, String filename, String contentType) {
+    private void setContentType(Headers headers, String filename) {
         int dotIndex = filename.indexOf('.');
         if(dotIndex != -1 && dotIndex + 1 != filename.length()){
             String extension = filename.substring(dotIndex + 1);
-            if(extension.equalsIgnoreCase("txt")){
-                extension = "plain";
-            }else if(extension.equalsIgnoreCase("js")){
-                extension = "javascript";
+            if(MimeType.MimeTypeUtils.map.containsKey(extension)){
+                headers.setContentType(MimeType.MimeTypeUtils.map.get(extension));
+                return;
             }
-            headers.set("Content-Type", contentType + "/" + extension);
-        }else{
-            headers.set("Content-Type", "text/html");
         }
+        headers.setContentType(MimeType.PLAIN);
+
     }
 
     private HandlerWrapper getHandlerWrapper(Request request) {
