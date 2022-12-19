@@ -33,6 +33,7 @@ public class HttpServerImpl implements HttpServer {
     private final ObjectMapper mapper;
 
     HttpServerImpl(int port, Map<String, HandlerWrapper> handlers, String rootDirPath, boolean fileMapping) {
+
         this.port = port;
         this.handlers = handlers;
         this.rootDirPath = rootDirPath;
@@ -66,28 +67,27 @@ public class HttpServerImpl implements HttpServer {
         }catch (IllegalRequestException | IOException e){
             return defaultBadRequestResponse(response);
         }
-
         HandlerWrapper handler = this.getHandlerWrapper(request);
         if(handler == null){
             String requestUrl = request.getUrl();
             if(this.fileMapping && UrlMatcher.getUrlType(requestUrl) == UrlType.FILE) {
                 requestUrl = mapIndexToIndexHTML(requestUrl);
                 try {
-                    handleStandardFileResponse(headers, response, requestUrl);
+                    log.info("Using file mapping");
+                    return handleStandardFileResponse(headers, response, requestUrl);
                 } catch (IOException ex) {
-                    response.setCode(HttpCode.NOT_FOUND);
+                    return defaultNotFoundResponse(response);
                 }
-                return response;
             }
+            return defaultNotFoundResponse(response);
         }else {
             try {
-                handleResponse(headers, response, request, handler);
+                log.info("Using handler mapping");
+                return handleResponse(headers, response, request, handler);
             } catch (UnsupportedOperationException | IOException e) {
                 return defaultNotFoundResponse(response);
             }
         }
-        log.info(request.toString());
-        return response;
     }
 
     private String mapIndexToIndexHTML(String requestUrl) {
@@ -106,15 +106,15 @@ public class HttpServerImpl implements HttpServer {
         return response;
     }
 
-    private void handleResponse(Headers headers, Response response, Request request, HandlerWrapper handler) throws IOException {
+    private Response handleResponse(Headers headers, Response response, Request request, HandlerWrapper handler) throws IOException {
         if(!handler.getContentType().equals(MimeType.JSON)){
-            handleFileResponse(headers, response, request, handler);
+            return handleFileResponse(headers, response, request, handler);
         }else {
-            handleRestResponse(headers, response, request, handler);
+            return handleRestResponse(headers, response, request, handler);
         }
     }
 
-    private void handleRestResponse(Headers headers, Response response, Request request, HandlerWrapper handler) throws JsonProcessingException {
+    private Response handleRestResponse(Headers headers, Response response, Request request, HandlerWrapper handler) throws JsonProcessingException {
         Object handled = handler.getHandler().parseRequest(request);
         byte[] indexBuilder = mapper.writeValueAsBytes(handled);
         int contentLength = indexBuilder.length;
@@ -124,9 +124,10 @@ public class HttpServerImpl implements HttpServer {
 
         response.setBody(indexBuilder);
         response.setCode(HttpCode.OK);
+        return response;
     }
 
-    private void handleFileResponse(Headers headers, Response response, Request request, HandlerWrapper handler) throws IOException {
+    private Response handleFileResponse(Headers headers, Response response, Request request, HandlerWrapper handler) throws IOException {
         String path = handler.getHandler().parseRequest(request).toString();
         File file = new File(this.rootDirPath + File.separator + path);
         String filename = file.getName();
@@ -135,8 +136,9 @@ public class HttpServerImpl implements HttpServer {
         headers.setContentLength(fileContent.length);
         response.setBody(fileContent);
         response.setCode(HttpCode.OK);
+        return response;
     }
-    private void handleStandardFileResponse(Headers headers, Response response, String url) throws IOException {
+    private Response handleStandardFileResponse(Headers headers, Response response, String url) throws IOException {
         String filename = url.substring(1);
         File file = new File(this.rootDirPath + File.separator + filename);
 
@@ -145,6 +147,7 @@ public class HttpServerImpl implements HttpServer {
         headers.setContentLength(fileContent.length);
         response.setBody(fileContent);
         response.setCode(HttpCode.OK);
+        return response;
     }
     private void setContentType(Headers headers, String filename) {
         int dotIndex = filename.indexOf('.');
@@ -156,7 +159,6 @@ public class HttpServerImpl implements HttpServer {
             }
         }
         headers.setContentType(MimeType.PLAIN);
-
     }
 
     private HandlerWrapper getHandlerWrapper(Request request) {
@@ -168,12 +170,10 @@ public class HttpServerImpl implements HttpServer {
                     public String getKey() {
                         return null;
                     }
-
                     @Override
                     public HandlerWrapper getValue() {
                         return null;
                     }
-
                     @Override
                     public HandlerWrapper setValue(HandlerWrapper value) {
                         return null;
